@@ -61,6 +61,7 @@ resource "azurerm_subnet_route_table_association" "aks" {
 }
 
 # Application Rule Collection for AKS egress
+# Updated with dynamic blocks and loops where applicable
 resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   name                = local.app_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -68,26 +69,61 @@ resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   priority            = 100
   action              = "Allow"
 
-  rule {
-    name = "allow-required-aks-fqdn"
+  dynamic "rule" {
+    for_each = {
+      "allow-required-aks-fqdn" = {
+        fqdns = [
+          "*.hcp.${var.location}.azmk8s.io",
+          "mcr.microsoft.com",
+          "*.cdn.mscr.io",
+          "management.azure.com",
+          "login.microsoftonline.com",
+          "packages.microsoft.com",
+          "acs-mirror.azureedge.net"
+        ]
+      }
+    }
 
-    source_addresses = [
-      var.aks_subnet_address_space
-    ]
+    content {
+      name             = rule.key
+      source_addresses = [var.aks_subnet_address_space]
+      target_fqdns     = rule.value.fqdns
 
-    target_fqdns = [
-      "*.hcp.${var.location}.azmk8s.io",
-      "mcr.microsoft.com",
-      "*.cdn.mscr.io",
-      "management.azure.com",
-      "login.microsoftonline.com",
-      "packages.microsoft.com",
-      "acs-mirror.azureedge.net"
-    ]
+      protocol {
+        port = "443"
+        type = "Https"
+      }
+    }
+  }
+}
 
-    protocol {
-      port = "443"
-      type = "Https"
+resource "azurerm_firewall_network_rule_collection" "aks_egress" {
+  name                = local.net_rule_collection_name
+  azure_firewall_name = azurerm_firewall.this.name
+  resource_group_name = var.resource_group_name
+  priority            = 200
+  action              = "Allow"
+
+  dynamic "rule" {
+    for_each = {
+      "allow-aks-dns" = {
+        ports     = ["53"]
+        addresses = ["8.8.8.8", "8.8.4.4"]
+        protocols = ["UDP", "TCP"]
+      }
+      "allow-aks-time" = {
+        ports     = ["123"]
+        addresses = ["*"]
+        protocols = ["UDP"]
+      }
+    }
+
+    content {
+      name                  = rule.key
+      source_addresses      = [var.aks_subnet_address_space]
+      destination_ports     = rule.value.ports
+      destination_addresses = rule.value.addresses
+      protocols             = rule.value.protocols
     }
   }
 }

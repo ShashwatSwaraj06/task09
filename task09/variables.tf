@@ -1,47 +1,44 @@
 variable "resource_group_name" {
-  description = "The name of the existing resource group where resources will be deployed"
   type        = string
+  description = "Name of the existing resource group"
 }
 
 variable "location" {
-  description = "The Azure region where resources will be deployed"
   type        = string
-  default     = "East US"
+  description = "Azure region for resources"
 }
 
 variable "vnet_name" {
-  description = "The name of the existing virtual network"
   type        = string
+  description = "Name of the existing virtual network"
 }
 
 variable "vnet_address_space" {
-  description = "The address space of the existing virtual network"
   type        = string
+  description = "Address space of the existing VNet"
 }
 
 variable "aks_subnet_name" {
-  description = "The name of the existing AKS subnet"
   type        = string
+  description = "Name of the existing AKS subnet"
 }
 
 variable "aks_subnet_address_space" {
-  description = "The address space of the existing AKS subnet"
   type        = string
+  description = "Address space of the AKS subnet"
 }
 
 variable "aks_loadbalancer_ip" {
-  description = "The public IP address of the existing AKS load balancer"
   type        = string
+  description = "Public IP of AKS load balancer"
 }
 
 variable "environment" {
-  description = "The environment tag to apply to resources"
   type        = string
-  default     = "mod9"
+  description = "Environment tag value"
 }
 
 variable "project_prefix" {
-  description = "The naming prefix for all resources"
   type        = string
-  default     = "cmtr-57d8b090"
+  description = "Prefix for resource naming"
 }
