@@ -61,7 +61,6 @@ resource "azurerm_subnet_route_table_association" "aks" {
 }
 
 # Application Rule Collection for AKS egress
-# Updated with dynamic blocks and loops where applicable
 resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   name                = local.app_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -97,6 +96,7 @@ resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   }
 }
 
+# Network Rule Collection for AKS egress
 resource "azurerm_firewall_network_rule_collection" "aks_egress" {
   name                = local.net_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -128,58 +128,7 @@ resource "azurerm_firewall_network_rule_collection" "aks_egress" {
   }
 }
 
-# Network Rule Collection for AKS egress
-resource "azurerm_firewall_network_rule_collection" "aks_egress" {
-  name                = local.net_rule_collection_name
-  azure_firewall_name = azurerm_firewall.this.name
-  resource_group_name = var.resource_group_name
-  priority            = 200
-  action              = "Allow"
-
-  rule {
-    name = "allow-aks-dns"
-
-    source_addresses = [
-      var.aks_subnet_address_space
-    ]
-
-    destination_ports = [
-      "53"
-    ]
-
-    destination_addresses = [
-      "8.8.8.8",
-      "8.8.4.4"
-    ]
-
-    protocols = [
-      "UDP",
-      "TCP"
-    ]
-  }
-
-  rule {
-    name = "allow-aks-time"
-
-    source_addresses = [
-      var.aks_subnet_address_space
-    ]
-
-    destination_ports = [
-      "123"
-    ]
-
-    destination_addresses = [
-      "*"
-    ]
-
-    protocols = [
-      "UDP"
-    ]
-  }
-}
-
-# NAT Rule Collection for AKS ingress (Corrected version)
+# NAT Rule Collection for AKS ingress
 resource "azurerm_firewall_nat_rule_collection" "aks_ingress" {
   name                = local.nat_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -190,20 +139,13 @@ resource "azurerm_firewall_nat_rule_collection" "aks_ingress" {
   rule {
     name = "nginx-ingress"
 
-    source_addresses = [
-      "*"
-    ]
+    source_addresses      = ["*"]
+    destination_addresses = [azurerm_public_ip.firewall.ip_address]
+    destination_ports     = ["80"]
+    translated_address    = var.aks_loadbalancer_ip
+    translated_port       = "80"
 
-    destination_addresses = [
-      azurerm_public_ip.firewall.ip_address
-    ]
-    destination_ports  = ["80"]
-    translated_address = var.aks_loadbalancer_ip
-    translated_port    = "80"
-
-    protocols = [
-      "TCP"
-    ]
+    protocols = ["TCP"]
   }
 }
 
