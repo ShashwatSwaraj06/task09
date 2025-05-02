@@ -60,7 +60,7 @@ resource "azurerm_subnet_route_table_association" "aks" {
   route_table_id = azurerm_route_table.aks.id
 }
 
-# Application Rule Collection for AKS egress
+# Application Rule Collection for AKS egress (Fixed FQDN format)
 resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   name                = local.app_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -68,30 +68,26 @@ resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   priority            = 100
   action              = "Allow"
 
-  dynamic "rule" {
-    for_each = {
-      "allow-required-aks-fqdn" = {
-        fqdns = [
-          "*.hcp.${var.location}.azmk8s.io",
-          "mcr.microsoft.com",
-          "*.cdn.mscr.io",
-          "management.azure.com",
-          "login.microsoftonline.com",
-          "packages.microsoft.com",
-          "acs-mirror.azureedge.net"
-        ]
-      }
-    }
+  rule {
+    name = "allow-required-aks-fqdn"
 
-    content {
-      name             = rule.key
-      source_addresses = [var.aks_subnet_address_space]
-      target_fqdns     = rule.value.fqdns
+    source_addresses = [var.aks_subnet_address_space]
 
-      protocol {
-        port = "443"
-        type = "Https"
-      }
+    target_fqdns = [
+      "*.hcp.eastus.azmk8s.io", # Fixed: Using lowercase region name without spaces
+      "mcr.microsoft.com",
+      "*.cdn.mscr.io",
+      "management.azure.com",
+      "login.microsoftonline.com",
+      "packages.microsoft.com",
+      "acs-mirror.azureedge.net",
+      "*.blob.core.windows.net",
+      "*.azurecr.io"
+    ]
+
+    protocol {
+      port = "443"
+      type = "Https"
     }
   }
 }
@@ -104,27 +100,36 @@ resource "azurerm_firewall_network_rule_collection" "aks_egress" {
   priority            = 200
   action              = "Allow"
 
-  dynamic "rule" {
-    for_each = {
-      "allow-aks-dns" = {
-        ports     = ["53"]
-        addresses = ["8.8.8.8", "8.8.4.4"]
-        protocols = ["UDP", "TCP"]
-      }
-      "allow-aks-time" = {
-        ports     = ["123"]
-        addresses = ["*"]
-        protocols = ["UDP"]
-      }
-    }
+  rule {
+    name = "allow-aks-dns"
 
-    content {
-      name                  = rule.key
-      source_addresses      = [var.aks_subnet_address_space]
-      destination_ports     = rule.value.ports
-      destination_addresses = rule.value.addresses
-      protocols             = rule.value.protocols
-    }
+    source_addresses = [var.aks_subnet_address_space]
+
+    destination_ports = ["53"]
+    destination_addresses = [
+      "8.8.8.8",
+      "8.8.4.4",
+      "168.63.129.16" # Azure DNS IP
+    ]
+    protocols = ["UDP", "TCP"]
+  }
+
+  rule {
+    name = "allow-aks-time"
+
+    source_addresses      = [var.aks_subnet_address_space]
+    destination_ports     = ["123"]
+    destination_addresses = ["*"]
+    protocols             = ["UDP"]
+  }
+
+  rule {
+    name = "allow-azure-services"
+
+    source_addresses      = [var.aks_subnet_address_space]
+    destination_ports     = ["443"]
+    destination_addresses = ["AzureCloud"] # Azure service tag
+    protocols             = ["TCP"]
   }
 }
 
