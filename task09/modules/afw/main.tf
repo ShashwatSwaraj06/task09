@@ -60,7 +60,7 @@ resource "azurerm_subnet_route_table_association" "aks" {
   route_table_id = azurerm_route_table.aks.id
 }
 
-# Application Rule Collection for AKS egress
+# Application Rule Collection with Dynamic Blocks
 resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   name                = local.app_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -68,36 +68,40 @@ resource "azurerm_firewall_application_rule_collection" "aks_egress" {
   priority            = 100
   action              = "Allow"
 
-  rule {
-    name = "allow-required-aks-fqdn"
-
-    source_addresses = [var.aks_subnet_address_space]
-
-    target_fqdns = [
-      "*.hcp.eastus.azmk8s.io",
-      "mcr.microsoft.com",
-      "*.cdn.mscr.io",
-      "management.azure.com",
-      "login.microsoftonline.com",
-      "packages.microsoft.com",
-      "acs-mirror.azureedge.net",
-      "*.blob.core.windows.net",
-      "*.azurecr.io"
-    ]
-
-    protocol {
-      port = "443"
-      type = "Https"
+  dynamic "rule" {
+    for_each = {
+      "allow-aks-egress" = {
+        fqdns = [
+          "*.hcp.${replace(var.location, " ", "")}.azmk8s.io",
+          "mcr.microsoft.com",
+          "*.cdn.mscr.io",
+          "management.azure.com",
+          "login.microsoftonline.com",
+          "packages.microsoft.com",
+          "acs-mirror.azureedge.net",
+          "*.blob.core.windows.net",
+          "*.azurecr.io"
+        ]
+      }
     }
 
-    protocol {
-      port = "80"
-      type = "Http"
+    content {
+      name             = rule.key
+      source_addresses = [var.aks_subnet_address_space]
+      target_fqdns     = rule.value.fqdns
+
+      dynamic "protocol" {
+        for_each = ["Http", "Https"]
+        content {
+          port = protocol.value == "Http" ? "80" : "443"
+          type = protocol.value
+        }
+      }
     }
   }
 }
 
-# Network Rule Collection for AKS egress
+# Network Rule Collection with Dynamic Blocks
 resource "azurerm_firewall_network_rule_collection" "aks_egress" {
   name                = local.net_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -105,40 +109,36 @@ resource "azurerm_firewall_network_rule_collection" "aks_egress" {
   priority            = 200
   action              = "Allow"
 
-  rule {
-    name = "allow-aks-dns"
+  dynamic "rule" {
+    for_each = {
+      "dns" = {
+        ports     = ["53"]
+        addresses = ["8.8.8.8", "8.8.4.4", "168.63.129.16"]
+        protocols = ["UDP", "TCP"]
+      }
+      "ntp" = {
+        ports     = ["123"]
+        addresses = ["*"]
+        protocols = ["UDP"]
+      }
+      "azure-services" = {
+        ports     = ["443", "80"]
+        addresses = ["AzureCloud"]
+        protocols = ["TCP"]
+      }
+    }
 
-    source_addresses = [var.aks_subnet_address_space]
-
-    destination_ports = ["53"]
-    destination_addresses = [
-      "8.8.8.8",
-      "8.8.4.4",
-      "168.63.129.16" # Azure DNS
-    ]
-    protocols = ["UDP", "TCP"]
-  }
-
-  rule {
-    name = "allow-aks-time"
-
-    source_addresses      = [var.aks_subnet_address_space]
-    destination_ports     = ["123"]
-    destination_addresses = ["*"]
-    protocols             = ["UDP"]
-  }
-
-  rule {
-    name = "allow-azure-services"
-
-    source_addresses      = [var.aks_subnet_address_space]
-    destination_ports     = ["443", "80"]
-    destination_addresses = ["AzureCloud"]
-    protocols             = ["TCP"]
+    content {
+      name                  = "allow-${rule.key}"
+      source_addresses      = [var.aks_subnet_address_space]
+      destination_ports     = rule.value.ports
+      destination_addresses = rule.value.addresses
+      protocols             = rule.value.protocols
+    }
   }
 }
 
-# NAT Rule Collection for AKS ingress
+# NAT Rule Collection with Dynamic Blocks
 resource "azurerm_firewall_nat_rule_collection" "aks_ingress" {
   name                = local.nat_rule_collection_name
   azure_firewall_name = azurerm_firewall.this.name
@@ -146,28 +146,21 @@ resource "azurerm_firewall_nat_rule_collection" "aks_ingress" {
   priority            = 300
   action              = "Dnat"
 
-  rule {
-    name = "nginx-http-ingress"
+  dynamic "rule" {
+    for_each = {
+      "http"  = { port = "80" }
+      "https" = { port = "443" }
+    }
 
-    source_addresses      = ["*"]
-    destination_addresses = [azurerm_public_ip.firewall.ip_address]
-    destination_ports     = ["80"]
-    translated_address    = var.aks_loadbalancer_ip
-    translated_port       = "80"
-
-    protocols = ["TCP"]
-  }
-
-  rule {
-    name = "nginx-https-ingress"
-
-    source_addresses      = ["*"]
-    destination_addresses = [azurerm_public_ip.firewall.ip_address]
-    destination_ports     = ["443"]
-    translated_address    = var.aks_loadbalancer_ip
-    translated_port       = "443"
-
-    protocols = ["TCP"]
+    content {
+      name                  = "nginx-${rule.key}"
+      source_addresses      = ["*"]
+      destination_addresses = [azurerm_public_ip.firewall.ip_address]
+      destination_ports     = [rule.value.port]
+      translated_address    = var.aks_loadbalancer_ip
+      translated_port       = rule.value.port
+      protocols             = ["TCP"]
+    }
   }
 }
 
