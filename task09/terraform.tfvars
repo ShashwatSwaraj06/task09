@@ -4,6 +4,6 @@ vnet_name                = "cmtr-57d8b090-mod9-vnet"
 vnet_address_space       = "10.0.0.0/16"
 aks_subnet_name          = "aks-snet"
 aks_subnet_address_space = "10.0.0.0/24"
-aks_loadbalancer_ip      = "4.156.8.223"
+aks_loadbalancer_ip      = "51.8.224.154" # Updated with correct IP from task parameters
 environment              = "mod9"
 project_prefix           = "cmtr-57d8b090"
