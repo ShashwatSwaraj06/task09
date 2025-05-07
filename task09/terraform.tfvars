@@ -1,5 +1,5 @@
 resource_group_name      = "cmtr-57d8b090-mod9-rg"
-location                 = "East US"
+location                 = "eastus"
 vnet_name                = "cmtr-57d8b090-mod9-vnet"
 vnet_address_space       = "10.0.0.0/16"
 aks_subnet_name          = "aks-snet"
